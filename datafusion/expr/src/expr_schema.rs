@@ -26,12 +26,19 @@ use crate::{aggregate_function, window_function, LogicalPlan, Projection, Subque
 use arrow::compute::can_cast_types;
 use arrow::datatypes::DataType;
 use datafusion_common::{Column, DFField, DFSchema, DataFusionError, ExprSchema, Result};
+use std::env::consts::FAMILY;
 use std::sync::Arc;
 
 /// trait to allow expr to typable with respect to a schema
 pub trait ExprSchemable {
     /// given a schema, return the type of the expr
     fn get_type<S: ExprSchema>(&self, schema: &S) -> Result<DataType>;
+
+    /// given a schema, return the dict id of the expr
+    fn get_dict_id<S: ExprSchema>(&self, schema: &S) -> Result<i64>;
+
+    /// given a schema, return the dict_is_ordered of the expr
+    fn dict_is_ordered<S: ExprSchema>(&self, input_schema: &S) -> Result<bool>;
 
     /// given a schema, return the nullability of the expr
     fn nullable<S: ExprSchema>(&self, input_schema: &S) -> Result<bool>;
@@ -245,23 +252,226 @@ impl ExprSchemable for Expr {
         }
     }
 
+    /// Returns the nullability of the expression based on [ExprSchema].
+    ///
+    /// Note: [DFSchema] implements [ExprSchema].
+    ///
+    /// # Errors
+    ///
+    /// This function errors when it is not possible to compute its
+    /// nullability.  This happens when the expression refers to a
+    /// column that does not exist in the schema.
+    fn dict_is_ordered<S: ExprSchema>(&self, input_schema: &S) -> Result<bool> {
+        match self {
+            Expr::Column(c) => input_schema.dict_is_ordered(c),
+            _ => Ok(false),
+        }
+        // match self {
+        //     Expr::Alias(expr, _)
+        //     | Expr::Not(expr)
+        //     | Expr::Negative(expr)
+        //     | Expr::Sort(Sort { expr, .. })
+        //     | Expr::InList(InList { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::Between(Between { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::Column(c) => input_schema.dict_is_ordered(c),
+        //     Expr::OuterReferenceColumn(_, _) => Ok(false),
+        //     Expr::Literal(value) => Ok(false),
+        //     Expr::Case(case) => {
+        //         // this expression is nullable if any of the input expressions are nullable
+        //         let then_nullable = case
+        //             .when_then_expr
+        //             .iter()
+        //             .map(|(_, t)| t.dict_is_ordered(input_schema))
+        //             .collect::<Result<Vec<_>>>()?;
+        //         if then_nullable.contains(&true) {
+        //             Ok(true)
+        //         } else if let Some(e) = &case.else_expr {
+        //             e.dict_is_ordered(input_schema)
+        //         } else {
+        //             // CASE produces NULL if there is no `else` expr
+        //             // (aka when none of the `when_then_exprs` match)
+        //             Ok(true)
+        //         }
+        //     }
+        //     Expr::Cast(Cast { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::ScalarVariable(_, _)
+        //     | Expr::TryCast { .. }
+        //     | Expr::ScalarFunction(..)
+        //     | Expr::ScalarUDF(..)
+        //     | Expr::WindowFunction { .. }
+        //     | Expr::AggregateFunction { .. }
+        //     | Expr::AggregateUDF { .. }
+        //     | Expr::Placeholder(_) => Ok(true),
+        //     Expr::IsNull(_)
+        //     | Expr::IsNotNull(_)
+        //     | Expr::IsTrue(_)
+        //     | Expr::IsFalse(_)
+        //     | Expr::IsUnknown(_)
+        //     | Expr::IsNotTrue(_)
+        //     | Expr::IsNotFalse(_)
+        //     | Expr::IsNotUnknown(_)
+        //     | Expr::Exists { .. } => Ok(false),
+        //     Expr::InSubquery(InSubquery { expr, .. }) => {
+        //         expr.dict_is_ordered(input_schema)
+        //     }
+        //     Expr::ScalarSubquery(subquery) => Ok(subquery
+        //         .subquery
+        //         .schema()
+        //         .field(0)
+        //         .field()
+        //         .dict_is_ordered()
+        //         .unwrap_or(false)),
+        //     Expr::BinaryExpr(BinaryExpr {
+        //         ref left,
+        //         ref right,
+        //         ..
+        //     }) => Ok(left.dict_is_ordered(input_schema)?
+        //         || right.dict_is_ordered(input_schema)?),
+        //     Expr::Like(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::ILike(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::SimilarTo(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::Wildcard => Err(DataFusionError::Internal(
+        //         "Wildcard expressions are not valid in a logical query plan".to_owned(),
+        //     )),
+        //     Expr::QualifiedWildcard { .. } => Err(DataFusionError::Internal(
+        //         "QualifiedWildcard expressions are not valid in a logical query plan"
+        //             .to_owned(),
+        //     )),
+        //     Expr::GetIndexedField(GetIndexedField { key, expr }) => {
+        //         let data_type = expr.get_type(input_schema)?;
+        //         get_indexed_field(&data_type, key)
+        //             .map(|x| x.dict_is_ordered().unwrap_or(false))
+        //     }
+        //     Expr::GroupingSet(_) => {
+        //         // grouping sets do not really have the concept of nullable and do not appear
+        //         // in projections
+        //         Ok(true)
+        //     }
+        // }
+    }
+
+    fn get_dict_id<S: ExprSchema>(&self, schema: &S) -> Result<i64> {
+        match self {
+            Expr::Column(c) => schema.dict_id(c),
+            _ => Ok(0),
+        }
+        // match self {
+        //     Expr::Alias(expr, _)
+        //     | Expr::Not(expr)
+        //     | Expr::Negative(expr)
+        //     | Expr::Sort(Sort { expr, .. })
+        //     | Expr::InList(InList { expr, .. }) => expr.get_dict_id(input_schema),
+        //     Expr::Between(Between { expr, .. }) => expr.get_dict_id(input_schema),
+        //     Expr::Column(c) => input_schema.get_dict_id(c),
+        //     Expr::OuterReferenceColumn(_, _) => Ok(false),
+        //     Expr::Literal(value) => Ok(false),
+        //     Expr::Case(case) => {
+        //         // this expression is nullable if any of the input expressions are nullable
+        //         let then_nullable = case
+        //             .when_then_expr
+        //             .iter()
+        //             .map(|(_, t)| t.get_dict_id(input_schema))
+        //             .collect::<Result<Vec<_>>>()?;
+        //         if then_nullable.contains(&true) {
+        //             Ok(true)
+        //         } else if let Some(e) = &case.else_expr {
+        //             e.get_dict_id(input_schema)
+        //         } else {
+        //             // CASE produces NULL if there is no `else` expr
+        //             // (aka when none of the `when_then_exprs` match)
+        //             Ok(true)
+        //         }
+        //     }
+        //     Expr::Cast(Cast { expr, .. }) => expr.get_dict_id(input_schema),
+        //     Expr::ScalarVariable(_, _)
+        //     | Expr::TryCast { .. }
+        //     | Expr::ScalarFunction(..)
+        //     | Expr::ScalarUDF(..)
+        //     | Expr::WindowFunction { .. }
+        //     | Expr::AggregateFunction { .. }
+        //     | Expr::AggregateUDF { .. }
+        //     | Expr::Placeholder(_)
+        //     | Expr::IsNull(_)
+        //     | Expr::IsNotNull(_)
+        //     | Expr::IsTrue(_)
+        //     | Expr::IsFalse(_)
+        //     | Expr::IsUnknown(_)
+        //     | Expr::IsNotTrue(_)
+        //     | Expr::IsNotFalse(_)
+        //     | Expr::IsNotUnknown(_)
+        //     | Expr::Exists { .. } => Ok(0),
+        //     Expr::InSubquery(InSubquery { expr, .. }) => expr.get_dict_id(input_schema),
+        //     Expr::ScalarSubquery(subquery) => Ok(subquery
+        //         .subquery
+        //         .schema()
+        //         .field(0)
+        //         .field()
+        //         .get_dict_id()
+        //         .unwrap_or(0)),
+        //     Expr::BinaryExpr(BinaryExpr {
+        //         ref left,
+        //         ref right,
+        //         ..
+        //     }) => Ok(left.dict_is_ordered(input_schema)?
+        //         || right.dict_is_ordered(input_schema)?),
+        //     Expr::Like(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::ILike(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::SimilarTo(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
+        //     Expr::Wildcard => Err(DataFusionError::Internal(
+        //         "Wildcard expressions are not valid in a logical query plan".to_owned(),
+        //     )),
+        //     Expr::QualifiedWildcard { .. } => Err(DataFusionError::Internal(
+        //         "QualifiedWildcard expressions are not valid in a logical query plan"
+        //             .to_owned(),
+        //     )),
+        //     Expr::GetIndexedField(GetIndexedField { key, expr }) => {
+        //         let data_type = expr.get_type(input_schema)?;
+        //         get_indexed_field(&data_type, key)
+        //             .map(|x| x.dict_is_ordered().unwrap_or(false))
+        //     }
+        //     Expr::GroupingSet(_) => {
+        //         // grouping sets do not really have the concept of nullable and do not appear
+        //         // in projections
+        //         Ok(true)
+        //     }
+        // }
+    }
     /// Returns a [arrow::datatypes::Field] compatible with this expression.
     ///
     /// So for example, a projected expression `col(c1) + col(c2)` is
     /// placed in an output field **named** col("c1 + c2")
     fn to_field(&self, input_schema: &DFSchema) -> Result<DFField> {
         match self {
-            Expr::Column(c) => Ok(DFField::new(
-                c.relation.clone(),
-                &c.name,
-                self.get_type(input_schema)?,
-                self.nullable(input_schema)?,
-            )),
-            _ => Ok(DFField::new_unqualified(
-                &self.display_name()?,
-                self.get_type(input_schema)?,
-                self.nullable(input_schema)?,
-            )),
+            Expr::Column(c) => Ok(match self.get_type(input_schema)? {
+                DataType::Dictionary(_, _) => DFField::new_dict(
+                    c.relation.clone(),
+                    &c.name,
+                    self.get_type(input_schema)?,
+                    self.nullable(input_schema)?,
+                    self.get_dict_id(input_schema)?,
+                    self.dict_is_ordered(input_schema)?,
+                ),
+                _ => DFField::new(
+                    c.relation.clone(),
+                    &c.name,
+                    self.get_type(input_schema)?,
+                    self.nullable(input_schema)?,
+                ),
+            }),
+            _ => Ok(match self.get_type(input_schema)? {
+                DataType::Dictionary(_, _) => DFField::new_unqualified_dict(
+                    &self.display_name()?,
+                    self.get_type(input_schema)?,
+                    self.nullable(input_schema)?,
+                    self.get_dict_id(input_schema)?,
+                    self.dict_is_ordered(input_schema)?,
+                ),
+                _ => DFField::new_unqualified(
+                    &self.display_name()?,
+                    self.get_type(input_schema)?,
+                    self.nullable(input_schema)?,
+                ),
+            }),
         }
     }
 
@@ -330,9 +540,11 @@ pub fn cast_subquery(subquery: Subquery, cast_to_type: &DataType) -> Result<Subq
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
-    use crate::{col, lit};
-    use arrow::datatypes::DataType;
+    use crate::{col, exp, lit};
+    use arrow::datatypes::{DataType, Field};
     use datafusion_common::{Column, ScalarValue};
 
     macro_rules! test_is_expr_nullable {
@@ -342,6 +554,50 @@ mod tests {
         }};
     }
 
+    #[test]
+    fn expr_with_dictionary_to_schema() {
+        let fields = vec![
+            Field::new_dict(
+                "dictionary_column1",
+                DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8)),
+                false,
+                1,
+                false,
+            ),
+            Field::new_dict(
+                "dictionary_column2",
+                DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8)),
+                false,
+                2,
+                true,
+            ),
+        ];
+        let mut dffield = vec![];
+        for i in fields {
+            dffield.push(DFField::from(i));
+        }
+        let dfschema = DFSchema::new_with_metadata(
+            dffield.clone(),
+            HashMap::<String, String>::new(),
+        )
+        .unwrap();
+        let expr = vec![col("dictionary_column1"), col("dictionary_column2")];
+        for i in 0..dffield.len() {
+            assert_eq!(expr[i].to_field(&dfschema).unwrap(), dffield[i]);
+            assert_eq!(
+                expr[i].to_field(&dfschema).unwrap().field().dict_id(),
+                dffield[i].field().dict_id()
+            );
+            assert_eq!(
+                expr[i]
+                    .to_field(&dfschema)
+                    .unwrap()
+                    .field()
+                    .dict_is_ordered(),
+                dffield[i].field().dict_is_ordered()
+            );
+        }
+    }
     #[test]
     fn expr_schema_nullability() {
         let expr = col("foo").eq(lit(1));
@@ -402,6 +658,14 @@ mod tests {
 
         fn data_type(&self, _col: &Column) -> Result<&DataType> {
             Ok(&self.data_type)
+        }
+
+        fn dict_id(&self, _col: &Column) -> Result<i64> {
+            Ok(0)
+        }
+
+        fn dict_is_ordered(&self, _col: &Column) -> Result<bool> {
+            Ok(false)
         }
     }
 }
