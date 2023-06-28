@@ -599,6 +599,7 @@ impl<P: AsRef<DFSchema> + std::fmt::Debug> ExprSchema for P {
     fn nullable(&self, col: &Column) -> Result<bool> {
         self.as_ref().nullable(col)
     }
+
     fn data_type(&self, col: &Column) -> Result<&DataType> {
         self.as_ref().data_type(col)
     }
@@ -616,6 +617,7 @@ impl ExprSchema for DFSchema {
     fn nullable(&self, col: &Column) -> Result<bool> {
         Ok(self.field_from_column(col)?.is_nullable())
     }
+
     fn data_type(&self, col: &Column) -> Result<&DataType> {
         Ok(self.field_from_column(col)?.data_type())
     }
@@ -658,7 +660,7 @@ impl DFField {
         }
     }
 
-    /// Convenience method for creating new `DFField` without a qualifier with dictionary type
+    /// Convenience method for creating new `DFField` without a qualifier
     pub fn new_unqualified(name: &str, data_type: DataType, nullable: bool) -> Self {
         DFField {
             qualifier: None,
@@ -686,7 +688,7 @@ impl DFField {
         }
     }
 
-    /// Convenience method for creating new `DFField` without a qualifier
+    /// Convenience method for creating new `DFField` without a qualifier with dict type
     pub fn new_unqualified_dict(
         name: &str,
         data_type: DataType,
