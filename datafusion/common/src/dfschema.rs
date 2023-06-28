@@ -586,6 +586,12 @@ pub trait ExprSchema: std::fmt::Debug {
 
     /// What is the datatype of this column?
     fn data_type(&self, col: &Column) -> Result<&DataType>;
+
+    /// Is this column reference dict_is_ordered?
+    fn dict_is_ordered(&self, col: &Column) -> Result<bool>;
+
+    /// What is the dict_id of this column?
+    fn dict_id(&self, col: &Column) -> Result<i64>;
 }
 
 // Implement `ExprSchema` for `Arc<DFSchema>`
@@ -593,9 +599,16 @@ impl<P: AsRef<DFSchema> + std::fmt::Debug> ExprSchema for P {
     fn nullable(&self, col: &Column) -> Result<bool> {
         self.as_ref().nullable(col)
     }
-
     fn data_type(&self, col: &Column) -> Result<&DataType> {
         self.as_ref().data_type(col)
+    }
+
+    fn dict_is_ordered(&self, col: &Column) -> Result<bool> {
+        self.as_ref().dict_is_ordered(col)
+    }
+
+    fn dict_id(&self, col: &Column) -> Result<i64> {
+        self.as_ref().dict_id(col)
     }
 }
 
@@ -603,9 +616,22 @@ impl ExprSchema for DFSchema {
     fn nullable(&self, col: &Column) -> Result<bool> {
         Ok(self.field_from_column(col)?.is_nullable())
     }
-
     fn data_type(&self, col: &Column) -> Result<&DataType> {
         Ok(self.field_from_column(col)?.data_type())
+    }
+
+    fn dict_is_ordered(&self, col: &Column) -> Result<bool> {
+        match self.field_from_column(col)?.field().dict_is_ordered() {
+            Some(dict_id_ordered) => Ok(dict_id_ordered),
+            _ => Ok(false),
+        }
+    }
+
+    fn dict_id(&self, col: &Column) -> Result<i64> {
+        match self.field_from_column(col)?.field().dict_id() {
+            Some(dict_id_ordered) => Ok(dict_id_ordered),
+            _ => Ok(0),
+        }
     }
 }
 
@@ -635,6 +661,42 @@ impl DFField {
     /// Convenience method for creating new `DFField` without a qualifier
     pub fn new_unqualified(name: &str, data_type: DataType, nullable: bool) -> Self {
         DFField {
+            None,
+            field: Arc::new(Field::new(name, data_type, nullable)),
+        }
+    }
+    /// Creates a new `DFField` with dict
+    pub fn new_dict(
+        qualifier: Option<&str>,
+        name: &str,
+        data_type: DataType,
+        nullable: bool,
+        dict_id: i64,
+        dict_is_ordered: bool,
+    ) -> Self {
+        DFField {
+            qualifier: qualifier.map(|s| s.into()),
+            field: Field::new_dict(name, data_type, nullable, dict_id, dict_is_ordered),
+        }
+    }
+
+    /// Convenience method for creating new `DFField` without a qualifier
+    pub fn new_unqualified_dict(
+        name: &str,
+        data_type: DataType,
+        nullable: bool,
+        dict_id: i64,
+        dict_is_ordered: bool,
+    ) -> Self {
+        DFField {
+            qualifier: None,
+            field: Field::new_dict(name, data_type, nullable, dict_id, dict_is_ordered),
+        }
+    }
+
+    /// Create an unqualified field from an existing Arrow field
+    pub fn from(field: Field) -> Self {
+        Self {
             qualifier: None,
             field: Arc::new(Field::new(name, data_type, nullable)),
         }
