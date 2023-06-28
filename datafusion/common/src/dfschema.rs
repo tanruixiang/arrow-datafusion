@@ -658,16 +658,16 @@ impl DFField {
         }
     }
 
-    /// Convenience method for creating new `DFField` without a qualifier
+    /// Convenience method for creating new `DFField` without a qualifier with dictionary type
     pub fn new_unqualified(name: &str, data_type: DataType, nullable: bool) -> Self {
         DFField {
-            None,
+            qualifier: None,
             field: Arc::new(Field::new(name, data_type, nullable)),
         }
     }
     /// Creates a new `DFField` with dict
-    pub fn new_dict(
-        qualifier: Option<&str>,
+    pub fn new_dict<R: Into<OwnedTableReference>>(
+        qualifier: Option<R>,
         name: &str,
         data_type: DataType,
         nullable: bool,
@@ -676,7 +676,13 @@ impl DFField {
     ) -> Self {
         DFField {
             qualifier: qualifier.map(|s| s.into()),
-            field: Field::new_dict(name, data_type, nullable, dict_id, dict_is_ordered),
+            field: Arc::new(Field::new_dict(
+                name,
+                data_type,
+                nullable,
+                dict_id,
+                dict_is_ordered,
+            )),
         }
     }
 
@@ -690,15 +696,13 @@ impl DFField {
     ) -> Self {
         DFField {
             qualifier: None,
-            field: Field::new_dict(name, data_type, nullable, dict_id, dict_is_ordered),
-        }
-    }
-
-    /// Create an unqualified field from an existing Arrow field
-    pub fn from(field: Field) -> Self {
-        Self {
-            qualifier: None,
-            field: Arc::new(Field::new(name, data_type, nullable)),
+            field: Arc::new(Field::new_dict(
+                name,
+                data_type,
+                nullable,
+                dict_id,
+                dict_is_ordered,
+            )),
         }
     }
 

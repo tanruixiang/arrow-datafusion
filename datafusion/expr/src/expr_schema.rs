@@ -478,7 +478,7 @@ impl ExprSchemable for Expr {
         match self {
             Expr::Column(c) => Ok(match self.get_type(input_schema)? {
                 DataType::Dictionary(_, _) => DFField::new_dict(
-                    c.relation.as_deref(),
+                    c.relation.clone(),
                     &c.name,
                     self.get_type(input_schema)?,
                     self.nullable(input_schema)?,
@@ -486,23 +486,21 @@ impl ExprSchemable for Expr {
                     self.dict_is_ordered(input_schema)?,
                 ),
                 _ => DFField::new(
-                    c.relation.as_deref(),
+                    c.relation.clone(),
                     &c.name,
                     self.get_type(input_schema)?,
                     self.nullable(input_schema)?,
                 ),
             }),
             _ => Ok(match self.get_type(input_schema)? {
-                DataType::Dictionary(_, _) => DFField::new_dict(
-                    None,
+                DataType::Dictionary(_, _) => DFField::new_unqualified_dict(
                     &self.display_name()?,
                     self.get_type(input_schema)?,
                     self.nullable(input_schema)?,
                     self.get_dict_id(input_schema)?,
                     self.dict_is_ordered(input_schema)?,
                 ),
-                _ => DFField::new(
-                    None,
+                _ => DFField::new_unqualified(
                     &self.display_name()?,
                     self.get_type(input_schema)?,
                     self.nullable(input_schema)?,
