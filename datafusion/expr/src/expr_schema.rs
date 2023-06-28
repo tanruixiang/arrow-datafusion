@@ -268,211 +268,21 @@ impl ExprSchemable for Expr {
         }
     }
 
-    /// Returns the nullability of the expression based on [ExprSchema].
-    ///
-    /// Note: [DFSchema] implements [ExprSchema].
-    ///
-    /// # Errors
-    ///
-    /// This function errors when it is not possible to compute its
-    /// nullability.  This happens when the expression refers to a
-    /// column that does not exist in the schema.
     fn dict_is_ordered<S: ExprSchema>(&self, input_schema: &S) -> Result<bool> {
         match self {
+            // TODO Handle more types
             Expr::Column(c) => input_schema.dict_is_ordered(c),
             _ => Ok(false),
         }
-        // match self {
-        //     Expr::Alias(expr, _)
-        //     | Expr::Not(expr)
-        //     | Expr::Negative(expr)
-        //     | Expr::Sort(Sort { expr, .. })
-        //     | Expr::InList(InList { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::Between(Between { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::Column(c) => input_schema.dict_is_ordered(c),
-        //     Expr::OuterReferenceColumn(_, _) => Ok(false),
-        //     Expr::Literal(value) => Ok(false),
-        //     Expr::Case(case) => {
-        //         // this expression is nullable if any of the input expressions are nullable
-        //         let then_nullable = case
-        //             .when_then_expr
-        //             .iter()
-        //             .map(|(_, t)| t.dict_is_ordered(input_schema))
-        //             .collect::<Result<Vec<_>>>()?;
-        //         if then_nullable.contains(&true) {
-        //             Ok(true)
-        //         } else if let Some(e) = &case.else_expr {
-        //             e.dict_is_ordered(input_schema)
-        //         } else {
-        //             // CASE produces NULL if there is no `else` expr
-        //             // (aka when none of the `when_then_exprs` match)
-        //             Ok(true)
-        //         }
-        //     }
-        //     Expr::Cast(Cast { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::ScalarVariable(_, _)
-        //     | Expr::TryCast { .. }
-        //     | Expr::ScalarFunction(..)
-        //     | Expr::ScalarUDF(..)
-        //     | Expr::WindowFunction { .. }
-        //     | Expr::AggregateFunction { .. }
-        //     | Expr::AggregateUDF { .. }
-        //     | Expr::Placeholder(_) => Ok(true),
-        //     Expr::IsNull(_)
-        //     | Expr::IsNotNull(_)
-        //     | Expr::IsTrue(_)
-        //     | Expr::IsFalse(_)
-        //     | Expr::IsUnknown(_)
-        //     | Expr::IsNotTrue(_)
-        //     | Expr::IsNotFalse(_)
-        //     | Expr::IsNotUnknown(_)
-        //     | Expr::Exists { .. } => Ok(false),
-        //     Expr::InSubquery(InSubquery { expr, .. }) => {
-        //         expr.dict_is_ordered(input_schema)
-        //     }
-        //     Expr::ScalarSubquery(subquery) => Ok(subquery
-        //         .subquery
-        //         .schema()
-        //         .field(0)
-        //         .field()
-        //         .dict_is_ordered()
-        //         .unwrap_or(false)),
-        //     Expr::BinaryExpr(BinaryExpr {
-        //         ref left,
-        //         ref right,
-        //         ..
-        //     }) => Ok(left.dict_is_ordered(input_schema)?
-        //         || right.dict_is_ordered(input_schema)?),
-        //     Expr::Like(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::ILike(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::SimilarTo(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::Wildcard => Err(DataFusionError::Internal(
-        //         "Wildcard expressions are not valid in a logical query plan".to_owned(),
-        //     )),
-        //     Expr::QualifiedWildcard { .. } => Err(DataFusionError::Internal(
-        //         "QualifiedWildcard expressions are not valid in a logical query plan"
-        //             .to_owned(),
-        //     )),
-        //     Expr::GetIndexedField(GetIndexedField { key, expr }) => {
-        //         let data_type = expr.get_type(input_schema)?;
-        //         get_indexed_field(&data_type, key)
-        //             .map(|x| x.dict_is_ordered().unwrap_or(false))
-        //     }
-        //     Expr::GroupingSet(_) => {
-        //         // grouping sets do not really have the concept of nullable and do not appear
-        //         // in projections
-        //         Ok(true)
-        //     }
-        // }
     }
 
     fn get_dict_id<S: ExprSchema>(&self, schema: &S) -> Result<i64> {
         match self {
+            // TODO Handle more types
             Expr::Column(c) => schema.dict_id(c),
             _ => Ok(0),
         }
-        // match self {
-        //     Expr::Alias(expr, _)
-        //     | Expr::Not(expr)
-        //     | Expr::Negative(expr)
-        //     | Expr::Sort(Sort { expr, .. })
-        //     | Expr::InList(InList { expr, .. }) => expr.get_dict_id(input_schema),
-        //     Expr::Between(Between { expr, .. }) => expr.get_dict_id(input_schema),
-        //     Expr::Column(c) => input_schema.get_dict_id(c),
-        //     Expr::OuterReferenceColumn(_, _) => Ok(false),
-        //     Expr::Literal(value) => Ok(false),
-        //     Expr::Case(case) => {
-        //         // this expression is nullable if any of the input expressions are nullable
-        //         let then_nullable = case
-        //             .when_then_expr
-        //             .iter()
-        //             .map(|(_, t)| t.get_dict_id(input_schema))
-        //             .collect::<Result<Vec<_>>>()?;
-        //         if then_nullable.contains(&true) {
-        //             Ok(true)
-        //         } else if let Some(e) = &case.else_expr {
-        //             e.get_dict_id(input_schema)
-        //         } else {
-        //             // CASE produces NULL if there is no `else` expr
-        //             // (aka when none of the `when_then_exprs` match)
-        //             Ok(true)
-        //         }
-        //     }
-        //     Expr::Cast(Cast { expr, .. }) => expr.get_dict_id(input_schema),
-        //     Expr::ScalarVariable(_, _)
-        //     | Expr::TryCast { .. }
-        //     | Expr::ScalarFunction(..)
-        //     | Expr::ScalarUDF(..)
-        //     | Expr::WindowFunction { .. }
-        //     | Expr::AggregateFunction { .. }
-        //     | Expr::AggregateUDF { .. }
-        //     | Expr::Placeholder(_)
-        //     | Expr::IsNull(_)
-        //     | Expr::IsNotNull(_)
-        //     | Expr::IsTrue(_)
-        //     | Expr::IsFalse(_)
-        //     | Expr::IsUnknown(_)
-        //     | Expr::IsNotTrue(_)
-        //     | Expr::IsNotFalse(_)
-        //     | Expr::IsNotUnknown(_)
-        //     | Expr::Exists { .. } => Ok(0),
-        //     Expr::InSubquery(InSubquery { expr, .. }) => expr.get_dict_id(input_schema),
-        //     Expr::ScalarSubquery(subquery) => Ok(subquery
-        //         .subquery
-        //         .schema()
-        //         .field(0)
-        //         .field()
-        //         .get_dict_id()
-        //         .unwrap_or(0)),
-        //     Expr::BinaryExpr(BinaryExpr {
-        //         ref left,
-        //         ref right,
-        //         ..
-        //     }) => Ok(left.dict_is_ordered(input_schema)?
-        //         || right.dict_is_ordered(input_schema)?),
-        //     Expr::Like(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::ILike(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::SimilarTo(Like { expr, .. }) => expr.dict_is_ordered(input_schema),
-        //     Expr::Wildcard => Err(DataFusionError::Internal(
-        //         "Wildcard expressions are not valid in a logical query plan".to_owned(),
-        //     )),
-        //     Expr::QualifiedWildcard { .. } => Err(DataFusionError::Internal(
-        //         "QualifiedWildcard expressions are not valid in a logical query plan"
-        //             .to_owned(),
-        //     )),
-        //     Expr::GetIndexedField(GetIndexedField { key, expr }) => {
-        //         let data_type = expr.get_type(input_schema)?;
-        //         get_indexed_field(&data_type, key)
-        //             .map(|x| x.dict_is_ordered().unwrap_or(false))
-        //     }
-        //     Expr::GroupingSet(_) => {
-        //         // grouping sets do not really have the concept of nullable and do not appear
-        //         // in projections
-        //         Ok(true)
-        //     }
-        // }
     }
-
-    /// Returns a [arrow::datatypes::Field] compatible with this expression.
-    ///
-    /// So for example, a projected expression `col(c1) + col(c2)` is
-    /// placed in an output field **named** col("c1 + c2")
-    // fn to_field(&self, input_schema: &DFSchema) -> Result<DFField> {
-    //     match self {
-    //         Expr::Column(c) => Ok(DFField::new(
-    //             c.relation.as_deref(),
-    //             &c.name,
-    //             self.get_type(input_schema)?,
-    //             self.nullable(input_schema)?,
-    //         )),
-    //         _ => Ok(DFField::new(
-    //             None,
-    //             &self.display_name()?,
-    //             self.get_type(input_schema)?,
-    //             self.nullable(input_schema)?,
-    //         )),
-    //     }
-    // }
 
     fn to_field(&self, input_schema: &DFSchema) -> Result<DFField> {
         match self {
