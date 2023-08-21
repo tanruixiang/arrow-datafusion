@@ -595,6 +595,7 @@ enum ScalarFunction {
   ArrayReplaceAll = 110;
   Nanvl = 111;
   Flatten = 112;
+  ArrayPopBack = 113;
 }
 
 message ScalarFunctionNode {
